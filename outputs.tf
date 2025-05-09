@@ -13,7 +13,7 @@ output "cloudfront_domain" {
   value       = aws_cloudfront_distribution.website.domain_name
 }
 
-output "nameservers" {
-  description = "The nameservers for the Route 53 zone"
-  value       = aws_route53_zone.main.name_servers
+output "name_servers" {
+  description = "Name servers to configure at your domain registrar"
+  value       = var.is_aws_registered ? null : aws_route53_zone.main[0].name_servers
 }

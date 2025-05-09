@@ -10,6 +10,7 @@ provider "aws" {
 # S3 bucket for static website
 resource "aws_s3_bucket" "website" {
   bucket = var.domain_name
+  force_destroy = true
   
   tags = {
     Name        = "Static Website Bucket"
@@ -61,6 +62,7 @@ resource "aws_s3_bucket_website_configuration" "website" {
 
 # Route 53 zone for your domain
 resource "aws_route53_zone" "main" {
+  count = var.is_aws_registered ? 0 : 1
   name = var.domain_name
 }
 
@@ -92,7 +94,7 @@ resource "aws_route53_record" "cert_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = aws_route53_zone.main.zone_id
+  zone_id         = var.is_aws_registered ? data.aws_route53_zone.existing[0].zone_id : aws_route53_zone.main[0].zone_id
 }
 
 # Certificate validation
@@ -103,8 +105,18 @@ resource "aws_acm_certificate_validation" "website" {
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
 
+# Data source for existing Route 53 zone (for AWS-registered domains)
+data "aws_route53_zone" "existing" {
+  count = var.is_aws_registered ? 1 : 0
+  name  = var.domain_name
+}
+
 # CloudFront distribution
 resource "aws_cloudfront_distribution" "website" {
+  depends_on = [
+    aws_acm_certificate_validation.website
+  ]
+
   origin {
     domain_name = aws_s3_bucket_website_configuration.website.website_endpoint
     origin_id   = "S3-${var.domain_name}"
@@ -157,7 +169,7 @@ resource "aws_cloudfront_distribution" "website" {
 
 # Route 53 record pointing to CloudFront
 resource "aws_route53_record" "website" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = var.is_aws_registered ? data.aws_route53_zone.existing[0].zone_id : aws_route53_zone.main[0].zone_id
   name    = var.domain_name
   type    = "A"
 
